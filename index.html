@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Destruction's Minecraft Manager</title>
+    <style>
+        :root {
+            --bg-onyx: #050506; --panel-bg: #0d0d10; --border-color: #1e1e24;
+            --input-bg: #09090b; --text-main: #e4e4e7; --text-muted: #71717a;
+            --btn-dark: #18181b; --btn-dark-hover: #27272a; --btn-disabled: #121215;
+            --btn-delete: #3f1519; --text-delete: #f87171;
+            --btn-green: #16a34a; --btn-green-hover: #15803d;
+            --btn-warn: #d97706; --radius-md: 0px; --radius-lg: 0px;
+            --transition: 0s;
+        }
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; outline: none !important; }
+        input[type="text"], input[type="number"], textarea, select { user-select: text; -webkit-user-select: text; }
+        body { background-color: var(--bg-onyx); color: var(--text-main); font-family: -apple-system, sans-serif; margin: 0; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+        ::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 0px; border: 2px solid var(--bg-onyx); }
+        .title-bar { height: 38px; background: #000; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; padding-left: 18px; -webkit-app-region: drag; }
+        .title-bar-text { font-size: 0.75rem; font-weight: 700; color: #71717a; letter-spacing: 1.2px; text-transform: uppercase; display: flex; align-items: center; gap: 10px;}
+        .title-controls { display: flex; height: 100%; -webkit-app-region: no-drag; }
+        .t-btn { background: transparent; border: none; color: #a1a1aa; width: 45px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .t-btn:hover { background: var(--btn-dark-hover); color: white; }
+        .t-btn.close:hover { background: #e81123; color: white; }
+        .view { display: none; flex: 1; width: 100%; overflow: hidden; }
+        .view.active { display: flex; transform: none; animation: none; flex-direction: column; }
+        .btn-base { background: var(--btn-dark); border: 1px solid var(--border-color); color: var(--text-main); border-radius: var(--radius-md); font-size: 0.85rem; padding: 8px 18px; cursor: pointer; font-weight: 500; }
+        .btn-base:hover:not(:disabled) { background: var(--btn-dark-hover); border-color: #3f3f46; }
+        .btn-base:active:not(:disabled) { transform: scale(0.98); } 
+        .btn-base:disabled { opacity: 0.5; cursor: not-allowed; background: var(--btn-disabled); color: var(--text-muted); border-color: transparent;}
+        .btn-open { background: var(--btn-green); border-color: transparent; color: white; }
+        .btn-open:hover:not(:disabled) { background: var(--btn-green-hover); }
+        .btn-warn { background: var(--btn-warn); border-color: transparent; color: white; }
+        .btn-kill { background: var(--btn-delete); border-color: #5c1b22; color: var(--text-delete); }
+        .onyx-checkbox { accent-color: var(--btn-green); width: 18px; height: 18px; margin: 0; cursor: pointer; border-radius: 0px; }
+        .onyx-input, .onyx-select { background: var(--input-bg); border: 1px solid var(--border-color); color: white; padding: 12px 14px; border-radius: var(--radius-md); width: 100%; outline: none; font-family: inherit; font-size: 0.9rem; }
+        .onyx-input:focus, .onyx-select:focus { border-color: #3f3f46; }
+        .onyx-select { appearance: none; background-image: url('data:image/svg+xml;utf8,<svg fill="%2371717a" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>'); background-repeat: no-repeat; background-position-x: 96%; background-position-y: 50%; }
+        .onyx-select option { background: var(--panel-bg); color: var(--text-main); }
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--btn-dark); border: 1px solid var(--border-color); }
+        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 4px; bottom: 4px; background-color: var(--text-muted); }
+        input:checked + .slider { background-color: var(--btn-green); border-color: var(--btn-green); }
+        input:checked + .slider:before { transform: translateX(20px); background-color: white; }
+        .server-card { background: var(--panel-bg); border: 1px solid var(--border-color); padding: 16px 24px 16px 0px; border-radius: var(--radius-lg); display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; cursor: pointer; transition: border-top 0.2s ease; }
+        .server-card:hover { border-color: #3f3f46; background: #141418; }
+        .server-card.dragging { opacity: 0.6; z-index: 50; }
+        .server-card.drag-over { border-top: 2px solid var(--btn-green); }
+        .drag-handle { cursor: grab; padding: 10px 14px; color: #52525b; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+        .drag-handle:active { cursor: grabbing; color: white; }
+        .status-dot { height: 10px; width: 10px; border-radius: 0px; display: inline-block; margin-right: 8px; }
+        .status-online { background-color: #16a34a; }
+        .status-offline { background-color: #52525b; }
+        .floating-add-btn { position: absolute; bottom: 30px; right: 30px; padding: 12px 24px; }
+        
+        /* Global Kill Java Button */
+        .global-kill-btn { position: fixed; bottom: 20px; left: 20px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+
+        .workspace-layout { display: flex; height: 100%; width: 100%; }
+        .workspace-sidebar { width: 240px; background: #08080a; border-right: 1px solid var(--border-color); padding: 24px 16px; display: flex; flex-direction: column; gap: 6px; }
+        .tab-item { padding: 12px 16px; border-radius: var(--radius-md); color: var(--text-muted); cursor: pointer; font-weight: 500; font-size: 0.9rem; }
+        .tab-item:hover { background: #121215; color: var(--text-main); }
+        .tab-item.active { background: var(--panel-bg); color: white; border: 1px solid var(--border-color); }
+        .workspace-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-onyx); }
+        .workspace-header { padding: 24px 32px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: #08080a; }
+        .workspace-content { flex: 1; overflow: hidden; position: relative; }
+        .tab-content { display: none; height: 100%; padding: 24px 32px; flex-direction: column; overflow-y: auto; }
+        .tab-content.active { display: flex; }
+        .terminal-wrapper { flex: 1; background: #000; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow-y: auto; padding: 20px; font-family: 'Consolas', monospace; font-size: 0.85rem; white-space: pre-wrap; color: #d4d4d8; margin-bottom: 16px; word-break: break-all; user-select: text; -webkit-user-select: text; }
+        #currentPathDisplay { background: var(--input-bg); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: var(--radius-md); color: var(--text-muted); font-size: 0.85rem; font-family: monospace; display: flex; align-items: center; gap: 6px; cursor: default; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .path-display-style { background: var(--input-bg); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: var(--radius-md); color: var(--text-muted); font-size: 0.85rem; font-family: monospace; display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        
+        .file-list { flex: 1; overflow-y: auto; padding-right: 8px; }
+        .file-card { background: #000; border: 1px solid var(--border-color); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; cursor: pointer; border-radius: 0px; }
+        .file-badge { background: #27272a; color: #d4d4d8; padding: 3px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; text-transform: uppercase; margin-right: 12px; display: inline-block; min-width: 44px; text-align: center; }
+        .dir-badge { background: #3b82f6; color: white; }
+        .new-badge { background: #16a34a; color: white; margin-left: 12px; margin-right: 0; min-width: auto; padding: 2px 6px; }
+        
+        .editor-container { display: none; flex-direction: column; height: 100%; }
+        .editor-container.active { display: flex; }
+        .config-editor { flex: 1; background: #000; color: #e4e4e7; border: 1px solid var(--border-color); padding: 20px; font-family: 'Consolas', monospace; resize: none; outline: none; border-radius: var(--radius-lg); margin-top: 16px; font-size: 0.85rem; }
+        .custom-context-menu { position: fixed; background: #121215; border: 1px solid #27272a; border-radius: 0px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 10000; display: none; flex-direction: column; padding: 4px 0; min-width: 140px; }
+        .context-menu-item { padding: 8px 14px; font-size: 0.85rem; color: #e4e4e7; cursor: pointer; }
+        .context-menu-item:hover { background: #27272a; }
+        .context-menu-item.delete-item { color: #f87171; }
+        .context-menu-item.delete-item:hover { background: #451a1d; }
+        .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .settings-card { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 20px; }
+        .settings-card h3 { margin: 0 0 15px 0; font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 1px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .players-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; overflow-y: auto; padding-right: 10px; }
+        .player-card { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; display: flex; align-items: center; gap: 12px; cursor: pointer; }
+        .player-card:hover { border-color: var(--btn-green); }
+        .player-head { width: 40px; height: 40px; border-radius: 0px; background: #000; }
+        .copy-toast { position: absolute; background: #16a34a; color: #fff; padding: 2px 6px; border-radius: 0px; font-size: 0.7rem; pointer-events: none; transform: translateY(-20px); animation: fadeUpOut 0.8s ease forwards; }
+        @keyframes fadeUpOut { 0% { opacity: 0; transform: translateY(-5px); } 15% { opacity: 1; transform: translateY(-15px); } 85% { opacity: 1; transform: translateY(-15px); } 100% { opacity: 0; transform: translateY(-25px); } }
+        .analytics-stack { display: flex; flex-direction: column; gap: 20px; margin-top: 15px; height: 100%; }
+        .chart-container { flex: 1; background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px; position: relative; display: flex; flex-direction: column; }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .chart-value-label { font-size: 1.25rem; font-weight: 700; font-family: monospace; }
+        
+        /* Modals */
+        .modal-overlay { position: fixed; top: 38px; left: 0; width: 100%; height: calc(100% - 38px); background: rgba(0, 0, 0, 0.85); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-overlay.active { display: flex; }
+        .modal-card { background: var(--bg-onyx); width: 500px; border: 1px solid var(--border-color); border-radius: var(--radius-lg); }
+        .modal-header { padding: 20px 28px; font-weight: 600; font-size: 1.15rem; border-bottom: 1px solid var(--border-color); background: #08080a; }
+        .modal-body { padding: 28px; display: flex; flex-direction: column; gap: 18px; }
+        .modal-footer { padding: 18px 28px; display: flex; justify-content: flex-end; gap: 12px; background: #08080a; border-top: 1px solid var(--border-color); }
+        
+        .bulk-action-bar { display: none; position: fixed; bottom: 20px; right: 20px; background: var(--panel-bg); border: 1px solid var(--border-color); padding: 12px 18px; z-index: 99; gap: 10px; }
+        
+        .mini-folder-item { padding: 6px 10px; cursor: pointer; color: var(--text-main); font-family: monospace; display: flex; align-items: center; gap: 8px;}
+        .mini-folder-item:hover { background: #121215; }
+        .mini-folder-item.selected { background: #16a34a; color: white; }
+    </style>
+</head>
+<body>
+    <div class="title-bar">
+        <div class="title-bar-text">Destruction's Minecraft Manager | DMM</div>
+        <div class="title-controls"><button class="t-btn" id="minBtn">−</button><button class="t-btn close" id="closeBtn">✕</button></div>
+    </div>
+    
+    <button class="btn-base btn-kill global-kill-btn" id="globalKillJavaBtn">Kill java.exe</button>
+
+    <div id="viewServerList" class="view active">
+        <div style="padding: 40px; display: flex; flex-direction: column; height: 100%; position: relative;">
+            <div style="margin-bottom: 30px;">
+                <h1 style="margin: 0; font-size: 1.8rem; font-weight: 700;">Server List</h1>
+                <div style="display: flex; align-items: center; gap: 12px; margin-top: 5px;">
+                </div>
+            </div>
+            <div id="emptyState" style="color: var(--text-muted); text-align: center; margin-top: 60px; padding: 40px; border: 1px dashed var(--border-color); border-radius: var(--radius-lg);">
+                <div style="font-size: 2rem; margin-bottom: 10px;"></div>Nothing here but us chickens! xD
+            </div>
+            <div id="serversContainer" style="display:flex; flex-direction:column; overflow-y:auto; padding: 10px 10px 80px 10px; margin: -10px;"></div>
+            <button class="btn-base btn-open floating-add-btn" id="openModalBtn"> + </button>
+        </div>
+    </div>
+
+    <div id="viewDashboard" class="view">
+        <div class="workspace-layout">
+            <div class="workspace-sidebar">
+                <button class="btn-base" style="width: 100%; margin-bottom: 24px;" onclick="exitWorkspace()">← Back to List</button>
+                <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; padding-left: 8px;">Workspace</div>
+                <div class="tab-item active" onclick="switchTab('console')">Terminal</div>
+                <div class="tab-item" onclick="switchTab('files')">Files</div>
+                <div class="tab-item" onclick="switchTab('players')">Players</div>
+                <div class="tab-item" onclick="switchTab('analytics')">Analytics</div>
+                <div class="tab-item" onclick="switchTab('backups')">Snapshots</div>
+                <div class="tab-item" onclick="switchTab('tasks')">Scheduled Tasks</div>
+                <div class="tab-item" onclick="switchTab('settings')">Settings</div>
+            </div>
+            <div class="workspace-main">
+                <div class="workspace-header">
+                    <div>
+                        <h2 id="activeServerTitle" style="margin:0; font-size:1.3rem;">Loading...</h2>
+                        <div style="display: flex; align-items: center; gap: 12px; margin-top: 4px;">
+                            <span id="activeServerStatusLabel" style="font-size: 0.85rem; color: var(--text-muted);"><span class="status-dot status-offline"></span>Offline</span>
+                            <span id="activeNodeDisplayHeader" style="font-size: 0.85rem; color: var(--text-muted); border-left: 1px solid var(--border-color); padding-left: 12px;">Node: -</span>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:12px;">
+                        <button class="btn-base btn-open" id="controlStartBtn">Start</button>
+                        <button class="btn-base btn-warn" id="controlStopBtn" disabled>Stop</button>
+                        <button class="btn-base btn-kill" id="controlKillBtn" style="display:none;">Kill</button>
+                    </div>
+                </div>
+                <div class="workspace-content">
+                    <div id="tab-console" class="tab-content active">
+                        <div class="terminal-wrapper" id="terminalOutput"></div>
+                        <div style="display: flex; gap: 12px;">
+                            <input type="text" id="cmdInput" class="onyx-input" placeholder=">_">
+                            <button class="btn-base" id="sendCmdBtn">Send</button>
+                        </div>
+                    </div>
+                    <div id="tab-files" class="tab-content">
+                        <div id="fileBrowserView" style="display:flex; flex-direction:column; height:100%; position:relative;">
+                            <div style="display:flex; gap:10px; align-items:center; margin-bottom:12px;">
+                                <button class="btn-base" id="fileBackBtn" disabled>← Back</button>
+                                <div id="currentPathDisplay" style="flex:1;">/</div>
+                                <button class="btn-base" id="newItemTriggerBtn" style="border-color: #27272a;">New</button>
+                                <button class="btn-base" id="uploadFileTriggerBtn" style="background: var(--btn-dark);">Upload</button>
+                                <input type="file" id="hiddenFileInput" style="display:none;" multiple>
+                            </div>
+                            <div id="fileDropOverlay" style="display:none; position:absolute; top:50px; left:0; width:100%; height:calc(100% - 50px); background:rgba(22,163,74,0.1); border:2px dashed #16a34a; z-index:10; justify-content:center; align-items:center; color:#16a34a; font-weight:bold;">Drop files to upload</div>
+                            <div class="file-list" id="filesContainer"></div>
+                            <div class="bulk-action-bar" id="bulkActionBar">
+                                <button class="btn-base" id="bulkRenameBtn">Rename</button>
+                                <button class="btn-base" id="bulkMoveBtn">Move</button>
+                                <button class="btn-base btn-kill" id="bulkDeleteBtn">Delete</button>
+                            </div>
+                        </div>
+                        <div id="fileEditorView" class="editor-container">
+                            <div style="display:flex; justify-content:space-between; align-items:center; background: var(--panel-bg); padding: 12px 18px; border-radius: var(--radius-md);">
+                                <div class="path-display-style" id="editorFileName">editing...</div>
+                                <div style="display:flex; gap:12px;">
+                                    <button class="btn-base" onclick="attemptCloseEditor()">Cancel</button>
+                                    <button class="btn-base btn-open" id="saveEditorBtn">Save Changes</button>
+                                </div>
+                            </div>
+                            <textarea id="configEditorArea" class="config-editor" spellcheck="false"></textarea>
+                        </div>
+                    </div>
+                    <div id="tab-players" class="tab-content">
+                        <input type="text" id="playerSearch" class="onyx-input" placeholder="Search players..." style="margin-bottom: 20px;">
+                        <div id="playersGrid" class="players-grid"></div>
+                    </div>
+                    <div id="tab-analytics" class="tab-content">
+                        <div class="analytics-stack">
+                            <div class="chart-container">
+                                <div class="chart-header">
+                                    <div style="font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase;">CPU Usage</div>
+                                    <div class="chart-value-label" id="cpuLabelValue" style="color: #16a34a;">0%</div>
+                                </div>
+                                <canvas id="cpuGraphCanvas" style="flex:1; width:100%; border-top: 1px solid var(--border-color); margin-top:10px;"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <div class="chart-header">
+                                    <div style="font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase;">Memory Usage</div>
+                                    <div class="chart-value-label" id="ramLabelValue" style="color: #3b82f6;">0.0 GB</div>
+                                </div>
+                                <canvas id="ramGraphCanvas" style="flex:1; width:100%; border-top: 1px solid var(--border-color); margin-top:10px;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="tab-backups" class="tab-content">
+                        <div class="settings-card" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+                            <h3>Create Snapshot</h3>
+                            <div style="display:flex; gap:12px;">
+                                <input type="text" id="backupNameInput" class="onyx-input" placeholder="Snapshot Name">
+                                <button class="btn-base btn-open" id="createBackupBtn">Create</button>
+                            </div>
+                        </div>
+                        <div id="backupsContainer" style="display:flex; flex-direction:column; gap:12px;"></div>
+                    </div>
+                    <div id="tab-tasks" class="tab-content">
+                        <div class="settings-card" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+                            <h3>Create Automated Task</h3>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                                <input type="text" id="taskNameInput" class="onyx-input" placeholder="Task Name">
+                                <select id="taskTriggerSelect" class="onyx-select">
+                                    <option value="interval_timer">Interval Timer</option>
+                                    <option value="server_start">Server Start</option>
+                                    <option value="server_stop">Server Stop</option>
+                                    <option value="server_crash">Server Crash</option>
+                                    <option value="player_join">Player Join</option>
+                                    <option value="player_leave">Player Leave</option>
+                                </select>
+                            </div>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;" id="taskTimerContainer">
+                                <input type="number" id="taskTimerVal" class="onyx-input" placeholder="Value (e.g. 30)" value="30">
+                                <select id="taskTimerUnit" class="onyx-select">
+                                    <option value="s">Seconds</option>
+                                    <option value="m">Minutes</option>
+                                    <option value="h">Hours</option>
+                                    <option value="d">Days</option>
+                                    <option value="w">Weeks</option>
+                                </select>
+                            </div>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                                <select id="taskActionSelect" class="onyx-select">
+                                    <option value="create_backup">Create Snapshot</option>
+                                    <option value="restart_server">Restart Server</option>
+                                    <option value="stop_server">Stop Server</option>
+                                    <option value="send_command">Send Custom Command</option>
+                                    <option value="clear_logs">Clear Logs</option>
+                                </select>
+                                <input type="text" id="taskCommandVal" class="onyx-input" placeholder="Command (e.g. say Hello!)" style="display:none;">
+                            </div>
+                            <button class="btn-base btn-open" id="createTaskBtn">Save Task</button>
+                        </div>
+                        <div id="tasksContainer" style="display:flex; flex-direction:column; gap:12px;"></div>
+                    </div>
+                    <div id="tab-settings" class="tab-content">
+                        <div class="settings-grid">
+                            <div class="settings-card" style="grid-column: 1 / -1;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                    <h3 style="margin:0; border:none; padding:0;">Server Details</h3>
+                                    <button class="btn-base btn-open" id="saveSettingsBtn">Save All Settings</button>
+                                </div>
+                                <div style="display: flex; gap: 15px;">
+                                    <div style="flex: 1;"><label style="font-size: 0.8rem; color: var(--text-muted);">Server Name</label><input type="text" id="setServerName" class="onyx-input"></div>
+                                    <div style="flex: 2;"><label style="font-size: 0.8rem; color: var(--text-muted);">Server Description</label><input type="text" id="setServerDesc" class="onyx-input"></div>
+                                </div>
+                            </div>
+                            <div class="settings-card" style="grid-column: 1 / -1;">
+                                <h3>Config</h3>
+                                <div class="setting-row">
+                                    <span style="font-size: 0.9rem;">Auto-Check for Stable Updates</span>
+                                    <label class="switch"><input type="checkbox" id="loadAutoUpdateToggle"><span class="slider"></span></label>
+                                </div>
+                                <div class="setting-row">
+                                    <span style="font-size: 0.9rem;">Auto Reboot on Crash/Stop</span>
+                                    <label class="switch"><input type="checkbox" id="loadAutoRestart"><span class="slider"></span></label>
+                                </div>
+                                <div style="margin-bottom: 15px; display:flex; gap:15px;">
+                                    <div style="flex:1;">
+                                        <label style="font-size: 0.8rem; color: var(--text-muted); display:block; margin-bottom: 5px;">Java Version</label>
+                                        <select id="loadJavaVer" class="onyx-select"><option value="Default">System Default (Java)</option><option value="Java 17">Java 17</option><option value="Java 21">Java 21</option></select>
+                                    </div>
+                                    <div style="flex:1;">
+                                        <label style="font-size: 0.8rem; color: var(--text-muted); display:block; margin-bottom: 5px;">Startup Flags</label>
+                                        <input type="text" id="loadStartupFlags" class="onyx-input" placeholder="-XX:+UseG1GC">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="settings-card" style="grid-column: 1 / -1; border-color: #3f1519;">
+                                <h3 style="color: var(--text-delete); border-color: #3f1519;">Danger Zone</h3>
+                                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap:wrap;">
+                                    <button class="btn-base btn-kill" onclick="document.getElementById('changeJarModal').classList.add('active')">Change Jar</button>
+                                    <button class="btn-base btn-kill" id="resetWorldBtn">Reset World Data</button>
+                                    <button class="btn-base btn-kill" id="resetServerBtn">Reset Entire Server</button>
+                                    <button class="btn-base btn-kill" id="wipePlayersBtn">Wipe Player Data</button>
+                                    <button class="btn-base btn-kill" id="clearLogsBtn">Clear Logs</button>
+                                    <button class="btn-base btn-kill" id="purgeCacheBtn">Purge Cache</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="custom-context-menu" id="fileContextMenu">
+        <div class="context-menu-item" id="ctxRename">Rename</div>
+        <div class="context-menu-item" id="ctxMove">Move</div>
+        <div class="context-menu-item delete-item" id="ctxDelete">Delete</div>
+    </div>
+
+    <!-- Core App Modals -->
+    <div class="modal-overlay" id="addServerModal">
+        <div class="modal-card">
+            <div class="modal-header">New Server</div>
+            <div class="modal-body">
+                <div><label style="font-size: 0.8rem; color: var(--text-muted);">Server Name</label><input type="text" id="serverNameInput" class="onyx-input"></div>
+                <div style="display: flex; gap: 12px;">
+                    <div style="flex: 1;">
+                        <label style="font-size: 0.8rem; color: var(--text-muted);">Software</label>
+                        <select id="jarSelect" class="onyx-select">
+                            <option value="Vanilla">Vanilla</option>
+                            <option value="Snapshot">Vanilla (Snapshot)</option>
+                            <option value="Paper">PaperMC</option>
+                            <option value="Purpur">Purpur</option>
+                            <option value="Velocity">Velocity</option>
+                            <option value="Waterfall">Waterfall</option>
+                            <option value="Folia">Folia</option>
+                            <option value="Custom">Custom File</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1;" id="versionSelectContainer">
+                        <label style="font-size: 0.8rem; color: var(--text-muted);">Version</label>
+                        <select id="versionSelect" class="onyx-select"><option value="">Loading...</option></select>
+                    </div>
+                    <div style="flex: 1; display:none;" id="customFileContainer">
+                        <label style="font-size: 0.8rem; color: var(--text-muted);">Select Local .jar</label>
+                        <input type="file" id="customFileInput" accept=".jar" class="onyx-input" style="padding: 9px;">
+                    </div>
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <div style="flex: 1;"><label style="font-size: 0.8rem; color: var(--text-muted);">RAM Allocation (GB)</label><input type="number" id="ramSelect" class="onyx-input" value="2" min="1"></div>
+                    <div style="flex: 1;"><label style="font-size: 0.8rem; color: var(--text-muted);">Server Port</label><input type="number" id="portSelect" class="onyx-input" value="25565"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-base" onclick="document.getElementById('addServerModal').classList.remove('active')">Cancel</button>
+                <button class="btn-base btn-open" id="saveServerBtn" disabled>Install</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Custom UI Prompt Replacement Modals -->
+    <div class="modal-overlay" id="alertModal">
+        <div class="modal-card" style="width: 420px;">
+            <div class="modal-header">Notice</div>
+            <div class="modal-body" id="alertModalText" style="font-size: 0.95rem;">Alert Message</div>
+            <div class="modal-footer">
+                <button class="btn-base btn-open" id="alertOkBtn">OK</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal-overlay" id="promptModal">
+        <div class="modal-card" style="width: 420px;">
+            <div class="modal-header">Input Required</div>
+            <div class="modal-body">
+                <div id="promptModalText" style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 8px;">Enter value:</div>
+                <input type="text" id="promptModalInput" class="onyx-input">
+            </div>
+            <div class="modal-footer">
+                <button class="btn-base" id="promptCancelBtn">Cancel</button>
+                <button class="btn-base btn-open" id="promptConfirmBtn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal-card" style="width: 420px;">
+            <div class="modal-header">Confirm Action</div>
+            <div class="modal-body" id="confirmModalText" style="font-size: 0.95rem;">Are you sure?</div>
+            <div class="modal-footer">
+                <button class="btn-base" onclick="document.getElementById('confirmModal').classList.remove('active'); confirmCallback = null;">Cancel</button>
+                <button class="btn-base btn-kill" id="confirmActionBtn">Proceed</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal-overlay" id="unsavedModal">
+        <div class="modal-card" style="width: 420px;">
+            <div class="modal-header">Unsaved Changes</div>
+            <div class="modal-body" style="font-size: 0.95rem;">You have unsaved changes. Exit without saving?</div>
+            <div class="modal-footer">
+                <button class="btn-base" id="unsavedCancelBtn">Cancel</button>
+                <button class="btn-base btn-kill" id="unsavedProceedBtn">Exit</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal-overlay" id="moveModal">
+        <div class="modal-card" style="width: 450px;">
+            <div class="modal-header">Move Item</div>
+            <div class="modal-body">
+                <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Select target folder inside core:</div>
+                <div id="miniExplorerContainer" style="max-height: 200px; min-height: 150px; overflow-y: auto; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: var(--radius-md);"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-base" onclick="document.getElementById('moveModal').classList.remove('active')">Cancel</button>
+                <button class="btn-base btn-open" id="confirmMoveBtn">Move Here</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- New Item Modal -->
+    <div class="modal-overlay" id="newItemModal">
+        <div class="modal-card" style="width: 400px;">
+            <div class="modal-header">Create New Item</div>
+            <div class="modal-body">
+                <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Enter name for new item:</div>
+                <input type="text" id="newItemNameInput" class="onyx-input" placeholder="e.g. server.properties or world">
+            </div>
+            <div class="modal-footer" style="justify-content: space-between;">
+                <button class="btn-base" onclick="document.getElementById('newItemModal').classList.remove('active')">Cancel</button>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn-base btn-open" id="createNewFileBtnFinal">Create File</button>
+                    <button class="btn-base btn-open" id="createNewFolderBtnFinal" style="background: var(--btn-warn);">Create Folder</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Task Modal -->
+    <div class="modal-overlay" id="editTaskModal">
+        <div class="modal-card" style="width: 500px;">
+            <div class="modal-header">Edit Task</div>
+            <div class="modal-body">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                    <input type="text" id="editTaskNameInput" class="onyx-input" placeholder="Task Name">
+                    <select id="editTaskTriggerSelect" class="onyx-select">
+                        <option value="interval_timer">Interval Timer</option>
+                        <option value="server_start">Server Start</option>
+                        <option value="server_stop">Server Stop</option>
+                        <option value="server_crash">Server Crash</option>
+                        <option value="player_join">Player Join</option>
+                        <option value="player_leave">Player Leave</option>
+                    </select>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;" id="editTaskTimerContainer">
+                    <input type="number" id="editTaskTimerVal" class="onyx-input" placeholder="Value (e.g. 30)">
+                    <select id="editTaskTimerUnit" class="onyx-select">
+                        <option value="s">Seconds</option>
+                        <option value="m">Minutes</option>
+                        <option value="h">Hours</option>
+                        <option value="d">Days</option>
+                        <option value="w">Weeks</option>
+                    </select>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                    <select id="editTaskActionSelect" class="onyx-select">
+                        <option value="create_backup">Create Snapshot</option>
+                        <option value="restart_server">Restart Server</option>
+                        <option value="stop_server">Stop Server</option>
+                        <option value="send_command">Send Custom Command</option>
+                        <option value="clear_logs">Clear Logs</option>
+                    </select>
+                    <input type="text" id="editTaskCommandVal" class="onyx-input" placeholder="Command (e.g. say Hello!)" style="display:none;">
+                </div>
+                <input type="hidden" id="editTaskId" value="">
+                <input type="hidden" id="editTaskEnabled" value="">
+            </div>
+            <div class="modal-footer">
+                <button class="btn-base" onclick="document.getElementById('editTaskModal').classList.remove('active')">Cancel</button>
+                <button class="btn-base btn-open" id="saveEditedTaskBtn">Update Task</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Player Action Modal -->
+    <div class="modal-overlay" id="playerModal">
+        <div class="modal-card" style="width: 400px;">
+            <div class="modal-header" style="display:flex; align-items:center; gap: 12px;">
+                <img id="pmHead" src="" style="width:40px; height:40px; background:#000;">
+                <span id="pmName">Player Name</span>
+            </div>
+            <div class="modal-body" style="gap: 12px;">
+                <button class="btn-base" id="pmBtnOp" style="width: 100%; background:#311042; color:#d946ef; padding: 12px;">OP Player</button>
+                <button class="btn-base" id="pmBtnWhite" style="width: 100%; background:#14532d; color:#4ade80; padding: 12px;">Whitelist</button>
+                <button class="btn-base" id="pmBtnKick" style="width: 100%; background:#27272a; color:#e4e4e7; padding: 12px;">Kick</button>
+                <button class="btn-base" id="pmBtnBan" style="width: 100%; background:#4c0519; color:#f43f5e; padding: 12px;">Ban</button>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-base" onclick="document.getElementById('playerModal').classList.remove('active')">Close</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal-overlay" id="changeJarModal">
+        <div class="modal-card" style="width: 450px;">
+            <div class="modal-header" style="color: var(--btn-warn);">Change Jar</div>
+            <div class="modal-body" style="font-size: 0.9rem; line-height: 1.5;">
+                <select id="hotJarSelect" class="onyx-select" style="margin-bottom:10px;">
+                    <option value="Vanilla">Vanilla</option>
+                    <option value="Snapshot">Vanilla (Snapshot)</option>
+                    <option value="Paper">PaperMC</option>
+                    <option value="Purpur">Purpur</option>
+                    <option value="Velocity">Velocity</option>
+                    <option value="Waterfall">Waterfall</option>
+                    <option value="Folia">Folia</option>
+                    <option value="Custom">Custom File</option>
+                </select>
+                <select id="hotVersionSelect" class="onyx-select"><option value="">Select type first</option></select>
+                <input type="file" id="hotCustomFileInput" accept=".jar" class="onyx-input" style="padding: 9px; display:none; margin-top:10px;">
+                <br><br>Warning: This will delete your current server.jar and download the selected one. Take a snapshot first!
+            </div>
+            <div class="modal-footer">
+                <button class="btn-base" onclick="document.getElementById('changeJarModal').classList.remove('active')">Cancel</button>
+                <button class="btn-base btn-warn" id="hotLoadBtn" disabled>Replace & Download</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="renderer.js"></script>
+</body>
+</html>
